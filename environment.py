@@ -69,49 +69,68 @@ class MK1Environment(gym.Env):
     def _parse_player_one_health(self, p1_slice):
         """
         Entity 1 Pipeline: Player 1 (Smoke)
-        Calibrated for bright yellow-orange full-health gradient tip on the left.
+        Tracks health by finding the brightest glowing tip of the active bar.
+        P1 drains from Right to Left.
         """
         if p1_slice is None or p1_slice.size == 0:
             return 1.0
 
         hsv_p1 = cv2.cvtColor(p1_slice, cv2.COLOR_BGR2HSV)
-        lower_p1 = np.array([0, 45, 80])
-        upper_p1 = np.array([30, 255, 255])
-        mask_p1 = cv2.inRange(hsv_p1, lower_p1, upper_p1)
+        center_line = hsv_p1[4, :]
         
-        center_line = mask_p1[4, :]
-        p1_true_max_width = 810.0
+        start_x = 25   # Left edge near portrait
+        end_x = 835    # Right edge near timer wheel
+        total_width = float(end_x - start_x)
         
-        active_pixels = 0
-        for x in range(25, 835):
-            if x < len(center_line) and center_line[x] == 255:
-                active_pixels += 1
+        # Scan from the left portrait frame inward toward the timer wheel
+        # The first highly vibrant, bright pixel we hit is the leading edge of current health
+        active_edge = end_x
+        for x in range(start_x, end_x):
+            v = center_line[x][2] # Value (Brightness)
+            s = center_line[x][1] # Saturation
+            
+            # The active health bar tip glows intensely (V > 180) 
+            # while the trailing ghost bar is dull and dark (V < 120)
+            if v > 180 and s > 80:
+                active_edge = x
+                break
                 
-        ratio_p1 = active_pixels / p1_true_max_width
+        # Remaining health extends from that active edge to the right anchor
+        active_width = float(end_x - active_edge)
+        ratio_p1 = active_width / total_width
         return float(np.clip(ratio_p1, 0.0, 1.0))
 
     def _parse_player_two_health(self, p2_slice):
         """
         Entity 2 Pipeline: Player 2 (Sub-Zero)
-        Working version using the fixed, calibrated capacity baseline.
+        Tracks health by finding the brightest glowing tip of the active bar.
+        P2 drains from Left to Right.
         """
         if p2_slice is None or p2_slice.size == 0:
             return 1.0
 
         hsv_p2 = cv2.cvtColor(p2_slice, cv2.COLOR_BGR2HSV)
-        lower_p2 = np.array([0, 100, 130])
-        upper_p2 = np.array([179, 255, 255])
-        mask_p2 = cv2.inRange(hsv_p2, lower_p2, upper_p2)
+        center_line = hsv_p2[4, :]
         
-        center_line = mask_p2[4, :]
-        p2_true_max_width = 810.0
+        start_x = 5    # Left edge near timer wheel
+        end_x = 815    # Right edge near portrait
+        total_width = float(end_x - start_x)
         
-        active_pixels = 0
-        for x in range(5, 815):
-            if x < len(center_line) and center_line[x] == 255:
-                active_pixels += 1
+        # Scan from the right portrait frame inward toward the timer wheel
+        # The first highly vibrant, bright pixel we hit is the leading edge of current health
+        active_edge = start_x
+        for x in range(end_x - 1, start_x - 1, -1):
+            v = center_line[x][2] # Value (Brightness)
+            s = center_line[x][1] # Saturation
+            
+            # Identify the bright glowing tip of Sub-Zero's draining bar
+            if v > 180 and s > 80:
+                active_edge = x
+                break
                 
-        ratio_p2 = active_pixels / p2_true_max_width
+        # Remaining health extends from the left anchor up to that active edge
+        active_width = float(active_edge - start_x)
+        ratio_p2 = active_width / total_width
         return float(np.clip(ratio_p2, 0.0, 1.0))
 
     def _calculate_reward(self, current_obs):
