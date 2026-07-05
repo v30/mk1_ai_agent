@@ -17,7 +17,9 @@ KEY_MAP = {
     "block": "6",
     "kameo": "7",
     "flip_stance": "8",
-    "talisman": "q"
+    "talisman": "q",
+    "start": "enter",      # Map start to enter
+    "confirm": "enter"     # Map confirm to enter
 }
 
 class MK1ActionSpace:
@@ -45,10 +47,15 @@ class MK1ActionSpace:
 
     def execute(self, action_index):
         action_name, action_func = self.actions.get(action_index, ("NO_OP", self.no_operation))
-        # Kept the debug print for your verification
         print(f"DEBUG: Executing action index {action_index}: {action_name}") 
         action_func()
         return action_name
+
+    def execute_raw_button(self, bind_name):
+        """Allows direct execution of UI/Menu keys (like start or confirm) by key name."""
+        bind_lower = bind_name.lower()
+        if bind_lower in KEY_MAP:
+            pydirectinput.press(KEY_MAP[bind_lower])
 
     def tap_key(self, bind_name):
         pydirectinput.press(KEY_MAP[bind_name])

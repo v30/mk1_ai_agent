@@ -1,14 +1,18 @@
 import os
 import time
 from stable_baselines3 import PPO
+from stable_baselines3.common.vec_env import DummyVecEnv, VecFrameStack
 from stable_baselines3.common.callbacks import CheckpointCallback
-from environment import MK1AIEv
+from environment import MK1Environment  # Fixed import to match your class name
 
 def main():
     print("--- Initializing Mortal Kombat 1 AI Training Harness ---")
     
-    # 1. Instantiate the Custom Gymnasium Environment
-    env = MK1AIEv()
+    # 1. Instantiate the Custom Gymnasium Environment & Apply Mandatory Wrappers
+    # Frame stacking allows the policy network to see across multiple sequential frames
+    base_env = MK1Environment()
+    env = DummyVecEnv([lambda: base_env])
+    env = VecFrameStack(env, n_stack=4, channels_order="first")
 
     # 2. Configure Logging Directories
     log_dir = "./tensorboard_logs/"
@@ -26,7 +30,8 @@ def main():
         learning_rate=3e-4,         
         n_steps=2048,               
         batch_size=64,              
-        n_epochs=10                 
+        n_epochs=10,
+        device="cuda"  # Forces GPU usage for model steps
     )
 
     # 4. Create a Training Lifecycle Callback
