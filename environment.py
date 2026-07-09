@@ -43,11 +43,18 @@ class MK1Environment(gym.Env):
         self.zero_hp_duration = 0
         self.match_ended = False
         self.is_menu_state = False  # Critical gate to block PPO actions
+        
+        # --- ADDED FOR PRACTICE MODE TRAJECTORIES ---
+        self.current_step = 0
+        self.max_steps_per_episode = 1000  # Artificially wraps up the episode after ~1000 actions
 
     def reset(self, seed=None, options=None):
         super().reset(seed=seed)
         
         self.is_menu_state = True
+        
+        # --- ADDED: Reset the step counter every single episode ---
+        self.current_step = 0
         
         # If a match ended, enter our active state machine loop
         if hasattr(self, 'match_ended') and self.match_ended:
@@ -157,6 +164,10 @@ class MK1Environment(gym.Env):
         observation = self._get_current_telemetry()
         reward = self._calculate_reward(observation)
         
+        # --- ADDED: Increment the step tracking metric ---
+        self.current_step += 1
+        
+        # Check standard HP conditions
         is_zero_hp = bool(observation[0] <= 0.0 or observation[1] <= 0.0)
         
         if is_zero_hp and not self.is_menu_state:
@@ -164,13 +175,21 @@ class MK1Environment(gym.Env):
         else:
             self.zero_hp_duration = 0
             
+        # 1. Terminated means the match ended naturally via HP going down (Versus Mode)
         terminated = bool(self.zero_hp_duration > 25)
         if terminated:
-            print("[ENV] Definite match termination recognized.")
+            print("[ENV] Definite match termination recognized via HP drops.")
             self.is_menu_state = True
             self.match_ended = True
 
-        return observation, reward, terminated, False, {}
+        # 2. Truncated means time/step limit expired (Practice Mode fake round reset)
+        truncated = False
+        if self.current_step >= self.max_steps_per_episode:
+            print(f"[ENV] Trajectory complete ({self.max_steps_per_episode} steps). Reporting episode wrap-up to TensorBoard.")
+            truncated = True
+
+        # Return all required parameters back to Stable-Baselines3
+        return observation, reward, terminated, truncated, {}
 
     def _take_action(self, action):
         self.controller.execute(action)
